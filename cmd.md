@@ -1,1 +1,0 @@
-python train.py --experiment reconstruction_single
