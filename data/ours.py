@@ -64,6 +64,19 @@ class MRI_singleOperator(LinearOperator):
         data_complex = fastmri.ifft2c(data*self.mask)
         return data_complex[:, :, :, :, 0]
     
+def normalize(data, mean, stddev, eps=0.0):
+    return (data - mean) / (stddev + eps)
+
+def normalize_instance(data, eps=0.0):
+    mean = data.mean()
+    std = data.std()
+    return normalize(data, mean, std, eps), mean, std
+
+
+def complex_abs(data):
+    assert data.size(-1) == 2
+    return (data ** 2).sum(dim=-1).sqrt()
+
 class OursDataset(Dataset):
     def __init__(
             self,
@@ -132,10 +145,10 @@ class OursDataset(Dataset):
         t2 = self.transform(t2)
         t3 = self.transform(t3)
         t4 = self.transform(t4)
-        t1 = 2.0*t1-1.0
-        t2 = 2.0*t2-1.0
-        t3 = 2.0*t3-1.0
-        t4 = 2.0*t4-1.0
+        # t1 = 2.0*t1-1.0
+        # t2 = 2.0*t2-1.0
+        # t3 = 2.0*t3-1.0
+        # t4 = 2.0*t4-1.0
 
         pd_img = t1
         pdf_img = t2
@@ -153,11 +166,26 @@ class OursDataset(Dataset):
         # pdfs_sample = (pdfs_kspace, pdfs_mask, pdfs_target, (2,1), pdfs_fname, i)
         
         pd_kspace = pd_kspace.squeeze(0).squeeze(0)
-        pd_kspace = pd_kspace.permute(2,0,1)
+        # pd_kspace = pd_kspace.permute(2,0,1)
         pdfs_kspace = pdfs_kspace.squeeze(0).squeeze(0)
-        pdfs_kspace = pdfs_kspace.permute(2,0,1)
-        pd_sample = (pd_kspace, pd_target, 1, 2, pd_fname, i)
-        pdfs_sample = (pdfs_kspace, pdfs_target, 1, 2, pdfs_fname, i)
+        # pdfs_kspace = pdfs_kspace.permute(2,0,1)
+
+        pd_kspace = fastmri.ifft2c(pd_kspace)
+        pdfs_kspace = fastmri.ifft2c(pdfs_kspace)
+        pd_kspace = complex_abs(pd_kspace)
+        pdfs_kspace = complex_abs(pdfs_kspace)
+
+        pd_kspace, mean_pd, std_pd = normalize_instance(pd_kspace, eps=1e-11)
+        pd_kspace = pd_kspace.clamp(-6, 6)
+        pdfs_kspace, mean_pdfs, std_pdfs = normalize_instance(pdfs_kspace, eps=1e-11)
+        pdfs_kspace = pdfs_kspace.clamp(-6, 6)
+
+        pd_target = normalize(pd_target, mean_pd, std_pd, eps=1e-11)
+        pdfs_target = normalize(pdfs_target, mean_pdfs, std_pdfs, eps=1e-11)
+
+
+        pd_sample = (pd_kspace, pd_target, mean_pd, std_pd, pd_fname, i)
+        pdfs_sample = (pdfs_kspace, pdfs_target, mean_pdfs, std_pdfs, pdfs_fname, i)
         
         # pd_sample = 
 
